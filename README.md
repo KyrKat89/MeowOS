@@ -1,2 +1,3 @@
 # MeowOS
-an html in browser os prototype
+An OS **Prototype** Running in a browser
+
