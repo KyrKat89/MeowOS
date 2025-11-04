@@ -1,0 +1,653 @@
+
+app_name:Tic Tac Toe 
+app_icon:X
+app_developer:KyrKat
+app_code:
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MeowTacToe</title>
+<style>
+  :root{
+    --accent:#6ee7ff;
+    --x:#ffd166;
+    --o:#a0e9a5;
+    --grid:#ffffff22;
+    --text:#ffffffee;
+    --muted:#ffffff99;
+  }
+
+  /* Transparent page */
+  html,body{height:100%}
+  body{
+    margin:0;
+    background:transparent;            /* <- transparent background */
+    color:var(--text);
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Inter,Arial,sans-serif;
+    display:grid;
+    place-items:center;
+    user-select:none;
+  }
+
+  .wrap{
+    display:grid;
+    gap:14px;
+    padding:14px;
+    border-radius:18px;
+    backdrop-filter:saturate(1.2) blur(0px); /* safe in sandbox; no solid bg */
+  }
+
+  .title{
+    text-align:center;
+    font-weight:700;
+    letter-spacing:.3px;
+    color:var(--muted);
+  }
+
+  .board{
+    --size:min(78vmin,440px);
+    width:var(--size);
+    height:var(--size);
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    grid-template-rows:repeat(3,1fr);
+    gap:10px;
+  }
+
+  .cell{
+    display:grid;
+    place-items:center;
+    font-size:clamp(42px,12vmin,96px);
+    font-weight:800;
+    line-height:1;
+    border:2px solid var(--grid);
+    border-radius:16px;
+    background:transparent;
+    color:var(--text);
+    cursor:pointer;
+    transition:transform .06s ease, box-shadow .12s ease, border-color .12s ease;
+    outline:none;
+  }
+  .cell:focus-visible{ box-shadow:0 0 0 3px #ffffff33; }
+  .cell:hover{ transform:translateY(-1px); }
+  .cell.filled{ cursor:not-allowed; }
+  .cell.x{ color:var(--x); }
+  .cell.o{ color:var(--o); }
+  .cell.win{ border-color:var(--accent); box-shadow:0 0 18px #6ee7ff30 inset; }
+
+  .status{
+    text-align:center;
+    font-size:15px;
+    color:var(--muted);
+    min-height:1.4em;
+  }
+
+  .actions{
+    display:flex; gap:10px; justify-content:center;
+  }
+  button.reset{
+    padding:10px 14px;
+    font-weight:700;
+    border-radius:12px;
+    border:2px solid var(--grid);
+    background:transparent;
+    color:var(--text);
+    cursor:pointer;
+    transition:background .12s ease,border-color .12s ease,transform .06s ease;
+  }
+  button.reset:hover{ border-color:#ffffff55; transform:translateY(-1px); }
+  button.reset:active{ transform:translateY(0); }
+  .sr-only{
+    position:absolute!important; width:1px;height:1px; padding:0;margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap;border:0;
+  }
+</style>
+</head>
+<body>
+  <main class="wrap" role="application" aria-label="Tic Tac Toe">
+    <div class="title">MeowTacToe — transparent purr-playground</div>
+    <div id="board" class="board" role="grid" aria-label="Tic Tac Toe Board"></div>
+    <div id="status" class="status" aria-live="polite">X starts, meow.</div>
+    <div class="actions">
+      <button class="reset" id="resetBtn" type="button" title="Start a new round">New Round</button>
+      <span class="sr-only" id="srHelp">Use arrow keys or Tab to move. Press Enter or Space to place.</span>
+    </div>
+  </main>
+
+<script>
+(()=>{
+  const boardEl = document.getElementById('board');
+  const statusEl = document.getElementById('status');
+  const resetBtn = document.getElementById('resetBtn');
+
+  const WIN_LINES = [
+    [0,1,2],[3,4,5],[6,7,8], // rows
+    [0,3,6],[1,4,7],[2,5,8], // cols
+    [0,4,8],[2,4,6]          // diags
+  ];
+
+  let board, current, gameOver, moves, nextStarter = 'X';
+
+  function init(){
+    board = Array(9).fill('');
+    current = nextStarter;          // alternate who starts each round
+    nextStarter = nextStarter === 'X' ? 'O' : 'X';
+    gameOver = false;
+    moves = 0;
+    boardEl.innerHTML = '';
+    for(let i=0;i<9;i++){
+      const btn = document.createElement('button');
+      btn.className = 'cell';
+      btn.type = 'button';
+      btn.setAttribute('role','gridcell');
+      btn.setAttribute('aria-label','Empty');
+      btn.dataset.idx = i;
+      btn.tabIndex = 0;
+      btn.addEventListener('click', onCellClick);
+      btn.addEventListener('keydown', e=>{
+        if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); btn.click(); }
+      });
+      boardEl.appendChild(btn);
+    }
+    updateStatus(`${current} starts, meow.`);
+  }
+
+  function onCellClick(e){
+    const idx = +e.currentTarget.dataset.idx;
+    if(gameOver || board[idx]) return;
+
+    board[idx] = current;
+    moves++;
+    paintCell(idx, current);
+
+    const win = checkWin();
+    if(win){
+      gameOver = true;
+      highlightWin(win);
+      updateStatus(`${current} wins! purrfect 🐾`);
+      return;
+    }
+    if(moves === 9){
+      gameOver = true;
+      updateStatus(`It's a draw, meow.`);
+      return;
+    }
+    current = current === 'X' ? 'O' : 'X';
+    updateStatus(`${current}'s turn, meow.`);
+  }
+
+  function paintCell(idx, mark){
+    const cell = boardEl.children[idx];
+    cell.textContent = mark;
+    cell.classList.add('filled', mark.toLowerCase());
+    cell.setAttribute('aria-label', mark);
+  }
+
+  function updateStatus(text){
+    statusEl.textContent = text;
+  }
+
+  function checkWin(){
+    for(const line of WIN_LINES){
+      const [a,b,c] = line;
+      if(board[a] && board[a]===board[b] && board[a]===board[c]) return line;
+    }
+    return null;
+  }
+
+  function highlightWin(line){
+    line.forEach(i => boardEl.children[i].classList.add('win'));
+  }
+
+  resetBtn.addEventListener('click', init);
+
+  init();
+})();
+</script>
+</body>
+</html>
+
+---
+
+app_name:ScramJet
+app_icon:https://github.com/MercuryWorkshop/scramjet/blob/main/assets/scramjet.png?raw=true
+app_developer:Mercury Workshop
+app_code:
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>scramjet iframe</title>
+  <style>
+    html, body { height: 100%; margin: 0; background: transparent; }
+    iframe { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; }
+  </style>
+</head>
+<body>
+  <iframe
+    src="https://scramjet-5e6.pages.dev/"
+    allow="clipboard-read; clipboard-write; fullscreen; geolocation; microphone; camera; autoplay; encrypted-media"
+    referrerpolicy="no-referrer"
+  ></iframe>
+</body>
+</html>
+
+---
+app_name:V86
+app_icon:https://copy.sh/img/v86.png
+app_developer:copy
+app_code:
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>v86 Emulator</title>
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+    }
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+  </style>
+</head>
+<body>
+  <iframe src="https://copy.sh/v86/" allowfullscreen></iframe>
+</body>
+</html>
+
+---
+app_name:MeowTube
+app_icon:https://img.freepik.com/premium-vector/square-youtube-logo-isolated-white-background_469489-911.jpg?semt=ais_hybrid&w=740&q=80
+app_developer:KyrKat
+app_code:
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MeowTube — simple YouTube player</title>
+  <style>
+    :root{
+      --glass: rgba(255,255,255,0.12);
+      --text: #e8ecf1;
+      --muted:#b9c2cf;
+      --accent:#8aa4ff;
+      --error:#ff6b6b;
+      --radius:16px;
+      --shadow:0 10px 30px rgba(0,0,0,.35);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      background: transparent; /* requested transparent background */
+      color: var(--text);
+      font: 500 16px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+      display:grid;place-items:center;
+    }
+    .wrap{
+      width:min(920px, 95vw);
+      display:grid; gap:14px;
+      backdrop-filter: saturate(140%) blur(10px);
+      -webkit-backdrop-filter: saturate(140%) blur(10px);
+      background: var(--glass);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: var(--radius);
+      padding:16px;
+      box-shadow: var(--shadow);
+    }
+    h1{
+      margin:0; font-size: 20px; font-weight:700; letter-spacing:.2px; color:var(--text);
+      display:flex; align-items:center; gap:10px;
+    }
+    h1 .logo{font-size:22px;}
+    .bar{display:flex; gap:10px; align-items:center;}
+    .bar input{
+      flex:1;
+      background: rgba(255,255,255,0.08);
+      border:1px solid rgba(255,255,255,0.15);
+      border-radius: 12px;
+      padding:12px 14px;
+      color:var(--text);
+      outline:none;
+    }
+    .bar input::placeholder{color:var(--muted)}
+    .btn{
+      appearance:none; border:0; cursor:pointer;
+      padding:12px 16px; border-radius:12px;
+      background:linear-gradient(180deg, rgba(255,255,255,0.28), rgba(255,255,255,0.14));
+      border:1px solid rgba(255,255,255,0.25);
+      color:#0b1020; font-weight:700;
+      transition:.15s ease transform, .15s ease filter;
+      user-select:none;
+    }
+    .btn:hover{filter:brightness(1.05)}
+    .btn:active{transform:translateY(1px)}
+    .error{display:none; color:var(--error); font-weight:600}
+    .player{
+      position:relative; width:100%;
+      border-radius: 14px; overflow:hidden;
+      background:rgba(0,0,0,.4);
+      border:1px solid rgba(255,255,255,.12);
+      aspect-ratio:16/9;
+      display:grid; place-items:center;
+    }
+    .player iframe{width:100%; height:100%; border:0; display:block}
+    .hint{font-size:12px; color:var(--muted)}
+  </style>
+</head>
+<body>
+  <main class="wrap" role="main">
+    <h1><span class="logo">📺</span> MeowTube</h1>
+    <div class="bar" role="group" aria-label="Enter YouTube URL">
+      <input id="url" type="url" inputmode="url" placeholder="Paste a YouTube link (watch, youtu.be, or Shorts)…" autocomplete="off" />
+      <button class="btn" id="play">Play</button>
+    </div>
+    <div class="hint">Tip: supports <code>youtube.com/watch?v=…</code>, <code>youtu.be/…</code>, and <code>youtube.com/shorts/…</code>. Start times like <code>&t=1m30s</code> are respected.</div>
+    <div id="error" class="error" role="alert">Couldn’t find a video ID in that link. Try a standard YouTube URL.</div>
+    <section class="player" aria-label="Video player">
+      <iframe id="frame" title="YouTube video player" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+    </section>
+  </main>
+
+  <script>
+    const input = document.getElementById('url');
+    const btn = document.getElementById('play');
+    const iframe = document.getElementById('frame');
+    const errorEl = document.getElementById('error');
+
+    function parseTimeToSeconds(t){
+      if(!t) return 0;
+      // Accept formats like 90, 1m30s, 2h10m, etc.
+      if(/^\d+$/.test(t)) return parseInt(t,10);
+      let total = 0; const re = /(\d+)(h|m|s)/g; let m;
+      while((m = re.exec(t))){
+        const val = parseInt(m[1],10);
+        if(m[2] === 'h') total += val*3600;
+        if(m[2] === 'm') total += val*60;
+        if(m[2] === 's') total += val;
+      }
+      return total;
+    }
+
+    function extractVideoId(raw){
+      try{
+        const u = new URL(raw.trim());
+        const host = u.hostname.replace(/^www\./,'');
+        // watch?v=ID
+        if(host.endsWith('youtube.com')){
+          // Shorts: /shorts/ID
+          const shortsMatch = u.pathname.match(/^\/shorts\/([a-zA-Z0-9_-]{6,})/);
+          if(shortsMatch) return { id: shortsMatch[1], t: u.searchParams.get('t') };
+          // Standard watch
+          const v = u.searchParams.get('v');
+          if(v) return { id: v, t: u.searchParams.get('t') };
+          // /embed/ID
+          const em = u.pathname.match(/^\/embed\/([a-zA-Z0-9_-]{6,})/);
+          if(em) return { id: em[1], t: u.searchParams.get('t') };
+        }
+        if(host === 'youtu.be'){
+          const m = u.pathname.match(/^\/([a-zA-Z0-9_-]{6,})/);
+          if(m) return { id: m[1], t: u.searchParams.get('t') };
+        }
+      }catch(e){ /* fall through */ }
+      // If raw looks like an id already
+      if(/^[a-zA-Z0-9_-]{6,}$/.test(raw.trim())) return { id: raw.trim(), t: null };
+      return null;
+    }
+
+    function play(){
+      const val = input.value;
+      const res = extractVideoId(val);
+      if(!res){
+        errorEl.style.display = 'block';
+        return;
+      }
+      errorEl.style.display = 'none';
+      const start = parseTimeToSeconds(res.t);
+      const params = new URLSearchParams({autoplay:1, modestbranding:1, rel:0, iv_load_policy:3});
+      if(start>0) params.set('start', String(start));
+      // Use origin if available (helps with some browsers)
+      try{ params.set('origin', location.origin); }catch{}
+      const src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(res.id)}?${params.toString()}`;
+      iframe.src = src;
+      // Move focus to player for keyboard shortcuts
+      iframe.focus({preventScroll:true});
+    }
+
+    btn.addEventListener('click', play);
+    input.addEventListener('keydown', (e)=>{ if(e.key==='Enter') play(); });
+
+    // If page opened with ?url=... prefill and play
+    try{
+      const q = new URLSearchParams(location.search);
+      const preset = q.get('url');
+      if(preset){ input.value = preset; play(); }
+    }catch{}
+  </script>
+</body>
+</html>
+
+---
+app_name:MeowAI
+app_icon:https://ia601207.us.archive.org/29/items/226f-0252-6725-4f-1e-8ae-6-dee-3a-615765a/226f0252-6725-4f1e-8ae6-dee3a615765a.png
+app_developer:KyrKat
+app_code:
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MeowAI — iframe wrapper</title>
+<style>
+  html, body { height: 100%; margin: 0; background: #0b0f17; color: #e6ecff; font-family: system-ui, sans-serif; }
+  .wrap { position: fixed; inset: 0; }
+  iframe { width: 100%; height: 100%; border: 0; display: block; }
+  .hint {
+    position: absolute; inset: 0; display: grid; place-items: center; text-align: center;
+    padding: 24px; background: radial-gradient(1200px 600px at 50% 0%, rgba(255,255,255,0.04), transparent 60%);
+  }
+  .hint[hidden] { display: none; }
+  .btn {
+    display: inline-block; margin-top: 10px; padding: 10px 14px; border-radius: 10px;
+    background: #8a9bff; color: #0b0f17; text-decoration: none; font-weight: 600;
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <iframe
+      id="meowai"
+      src="https://meowai.kyrylo89.workers.dev/"
+      allow="clipboard-read; clipboard-write; fullscreen; autoplay; camera; microphone"
+      referrerpolicy="origin-when-cross-origin"
+      loading="eager"
+    ></iframe>
+
+    <div id="fallback" class="hint" hidden>
+      <div>
+        <div style="font-size:22px; margin-bottom:8px;">If the page looks blank, your browser blocked the iframe 😿</div>
+        <a class="btn" href="https://meowai.kyrylo89.workers.dev/" target="_blank" rel="noopener">Open MeowAI directly</a>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // Simple fallback: if iframe doesn't finish loading quickly, show a direct-link hint.
+  const frame = document.getElementById('meowai');
+  const fallback = document.getElementById('fallback');
+  let loaded = false;
+
+  frame.addEventListener('load', () => { loaded = true; });
+
+  // After 4s, if still not loaded, show fallback (helps when X-Frame-Options/CSP blocks embedding)
+  setTimeout(() => { if (!loaded) fallback.hidden = false; }, 4000);
+</script>
+</body>
+</html>
+
+---
+app_name:Netflix
+app_icon:https://images.ctfassets.net/4cd45et68cgf/Rx83JoRDMkYNlMC9MKzcB/2b14d5a59fc3937afd3f03191e19502d/Netflix-Symbol.png?w=700&h=456
+app_developer:Netflix
+app_code:
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>MeowOS Proxy Frame</title>
+  <style>
+    /* reset */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background-color: #0b0f17;
+      color: #fff;
+      height: 100vh;
+      width: 100vw;
+      overflow: hidden;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .frame-wrapper {
+      position: relative;
+      height: 100%;
+      width: 100%;
+      border-radius: 0;
+      overflow: hidden;
+    }
+
+    iframe {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      background: #000;
+    }
+
+    /* fallback message if iframe can't load because of X-Frame-Options */
+    .fallback {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 2rem;
+      color: #a8b3d1;
+      background: radial-gradient(circle at 20% 20%, rgba(138,155,255,0.15) 0%, rgba(11,15,23,0) 60%);
+      font-size: 0.9rem;
+      line-height: 1.4;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="frame-wrapper">
+    <iframe
+      src="https://meowosproxy.kyrylo89.workers.dev/?url=https://netflix.com"
+      allowfullscreen
+      referrerpolicy="no-referrer"
+    ></iframe>
+
+   
+  </div>
+</body>
+</html>
+
+---
+app_name:OpenStreatMap
+app_icon:https://images.seeklogo.com/logo-png/48/1/openstreetmap-logo-png_seeklogo-483934.png
+app_developer:unknown
+app_code:
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>MeowOS Proxy Frame</title>
+  <style>
+    /* reset */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background-color: #0b0f17;
+      color: #fff;
+      height: 100vh;
+      width: 100vw;
+      overflow: hidden;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .frame-wrapper {
+      position: relative;
+      height: 100%;
+      width: 100%;
+      border-radius: 0;
+      overflow: hidden;
+    }
+
+    iframe {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      background: #000;
+    }
+
+    /* fallback message if iframe can't load because of X-Frame-Options */
+    .fallback {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 2rem;
+      color: #a8b3d1;
+      background: radial-gradient(circle at 20% 20%, rgba(138,155,255,0.15) 0%, rgba(11,15,23,0) 60%);
+      font-size: 0.9rem;
+      line-height: 1.4;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="frame-wrapper">
+    <iframe
+      src="https://meowosproxy.kyrylo89.workers.dev/?url=https://www.openstreetmap.org/"
+      allowfullscreen
+      referrerpolicy="no-referrer"
+    ></iframe>
+
+   
+  </div>
+</body>
+</html>
+
+---
