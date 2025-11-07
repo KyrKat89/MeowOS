@@ -1544,7 +1544,22 @@
         </select>
         <div class="row" style="justify-content:flex-end;gap:10px;margin-top:auto">
           <button class="btn secondary" id="obBack4">Back</button>
-          <button class="btn" id="obFinish">Finish Setup</button>
+          <button class="btn" id="obNext4">Next</button>
+        </div>
+      </div>
+      <div class="hidden card oobe-card" id="ob-step-5">
+        <div style="text-align:center">
+          <div style="font-size:56px;line-height:1">📂</div>
+          <h1 style="margin:8px 0 12px;font-size:28px;font-weight:600">Migrate Data</h1>
+        </div>
+        <p style="text-align:center" class="oobe-sub">Select a folder to migrate files to MeowOS. You can skip this.</p>
+        <input type="file" id="obMigrateFolder" webkitdirectory directory multiple style="display:none">
+        <button class="btn secondary" id="obChooseFolder">Choose Folder</button>
+        <div id="obMigrateStatus" style="margin:10px 0;color:var(--muted)"></div>
+        <div class="row" style="justify-content:flex-end;gap:10px;margin-top:auto">
+          <button class="btn secondary" id="obBack5">Back</button>
+          <button class="btn secondary" id="obSkipMigrate">Skip</button>
+          <button class="btn" id="obFinishMigrate">Finish Setup</button>
         </div>
       </div>
     </div>
@@ -2115,7 +2130,7 @@
                 <h2 class="settings-h2">Tablet Mode</h2>
                 <div class="section settings-row">
                   <h3 class="emoji" style="margin:0">📱 Tablet Mode</h3>
-                  <label style="display:flex;align-items:center;gap:10px;margin-left:auto"><input id="tabletMode" type="checkbox" class="switch"><span>Enable Tablet Mode (Full-screen windows, no resize/minimize)</span></label>
+                  <label style="display:flex;align-items:center;gap:10px;margin-left:auto"><input id="tabletMode" type="checkbox" class="switch"><span>Enable Tablet Mode (Full-screen windows, no no resize/minimize)</span></label>
                 </div>
               </div>
               <div class="settings-pane" data-pane="credits" hidden>
@@ -2413,6 +2428,11 @@
         }
         return allLoaded;
       }
+      function preload() {
+        preloadIcons().then(() => {
+          refreshIcons();
+        });
+      }
       function refreshIcons() {
         renderDock();
         buildMeowMenu();
@@ -2501,6 +2521,8 @@
           }
           let bg = '';
           if (def === 'default') {
+            bg = `radial-gradient(80vw 80vh at 10% 15%,var(${grad1}),transparent 60%),radial-gradient(80vw 80vh at 90% 85%,var(${grad2}),transparent 60%)`;
+          } else if (def === 'default') {
             bg = `radial-gradient(80vw 80vh at 10% 15%,var(${grad1}),transparent 60%),radial-gradient(80vw 80vh at 90% 85%,var(${grad2}),transparent 60%)`;
           } else if (def === 'orange-balls') {
             if (document.body.classList.contains('light')) {
@@ -2671,6 +2693,7 @@
         initKonami();
         initDebug();
         toggleAutoHideDock(store.get(K.autoHideDock, false));
+        if (store.get(K.theme, 'dark') === 'light') document.body.classList.add('light');
         if (isVM) document.title = 'MeowOS VM';
         // Control Center init
         $('#ccLightTheme').checked = store.get(K.theme, 'dark') === 'light';
@@ -2697,10 +2720,7 @@
           const cc = $('#controlCenter'), menu = $('#controlCenterMenu');
           if (!menu.contains(e.target) && !cc.contains(e.target)) menu.classList.add('hidden');
         });
-        preloadIcons().then(() => {
-          refreshIcons();
-        });
-        openWindow('notes');
+        preload();
       }
       function centerWindow(win) {
         if (store.get(K.tablet, false)) return;
@@ -2907,7 +2927,7 @@
         weatherWidget.appendChild(content);
         const city = store.get(K.weatherCity, 'London');
         const updateWeather = async () => {
-          const weather = await rWeatherFor(city);
+          const weather = await fetchWeatherFor(`weather ${city}`);
           content.innerHTML = `<div class="temp">${weather.split('°C')[0]}°C</div><div style="font-size:12px;color:var(--muted)">${city}</div>`;
         };
         updateWeather();
@@ -2915,13 +2935,6 @@
         $('#desktop').appendChild(weatherWidget);
         makeWidgetDraggable(weatherWidget);
         addWidgetResizers(weatherWidget, 100, 80);
-      }
-      function openInBrowser(url) {
-        openWindow('browser');
-        const input = $('#url');
-        input.value = url;
-        const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true });
-        input.dispatchEvent(event);
       }
       function toggleRandomWidget(enable) {
         if (randomWidget) randomWidget.remove();
@@ -2967,98 +2980,12 @@
         makeWidgetDraggable(randomWidget);
         addWidgetResizers(randomWidget, 150, 100);
       }
-      function makeWidgetDraggable(widget) {
-        let dragging = false, sx = 0, sy = 0, startX = 0, startY = 0;
-        widget.addEventListener('mousedown', e => {
-          if (e.target.closest('.resizer')) return;
-          if (e.button !== 0) return;
-          dragging = true;
-          widget.style.cursor = 'grabbing';
-          const rect = widget.getBoundingClientRect();
-          sx = rect.left;
-          sy = rect.top;
-          startX = e.clientX;
-          startY = e.clientY;
-          e.preventDefault();
-          e.stopPropagation();
-        });
-        window.addEventListener('mousemove', e => {
-          if (!dragging) return;
-          const dx = e.clientX - startX;
-          const dy = e.clientY - startY;
-          widget.style.left = (sx + dx) + 'px';
-          widget.style.top = (sy + dy) + 'px';
-          widget.style.right = 'auto';
-        });
-        window.addEventListener('mouseup', () => {
-          dragging = false;
-          widget.style.cursor = 'default';
-        });
-      }
-      function addWidgetResizers(widget, minW, minH) {
-        const directions = [
-          { pos: 'top-left', cursor: 'nwse-resize', dx: -1, dy: -1, width: '10px', height: '10px', top: '-5px', left: '-5px' },
-          { pos: 'top-right', cursor: 'nesw-resize', dx: 1, dy: -1, width: '10px', height: '10px', top: '-5px', right: '-5px' },
-          { pos: 'bottom-left', cursor: 'nesw-resize', dx: -1, dy: 1, width: '10px', height: '10px', bottom: '-5px', left: '-5px' },
-          { pos: 'bottom-right', cursor: 'nwse-resize', dx: 1, dy: 1, width: '10px', height: '10px', bottom: '-5px', right: '-5px' },
-          { pos: 'top', cursor: 'ns-resize', dx: 0, dy: -1, width: 'calc(100% + 10px)', height: '10px', top: '-5px', left: '-5px' },
-          { pos: 'bottom', cursor: 'ns-resize', dx: 0, dy: 1, width: 'calc(100% + 10px)', height: '10px', bottom: '-5px', left: '-5px' },
-          { pos: 'left', cursor: 'ew-resize', dx: -1, dy: 0, width: '10px', height: 'calc(100% + 10px)', left: '-5px', top: '-5px' },
-          { pos: 'right', cursor: 'ew-resize', dx: 1, dy: 0, width: '10px', height: 'calc(100% + 10px)', right: '-5px', top: '-5px' },
-        ];
-        directions.forEach(dir => {
-          const resizer = document.createElement('div');
-          resizer.className = `resizer ${dir.pos}`;
-          resizer.style.cursor = dir.cursor;
-          resizer.style.width = dir.width;
-          resizer.style.height = dir.height;
-          resizer.style.position = 'absolute';
-          resizer.style.userSelect = 'none';
-          if (dir.top) resizer.style.top = dir.top;
-          if (dir.bottom) resizer.style.bottom = dir.bottom;
-          if (dir.left) resizer.style.left = dir.left;
-          if (dir.right) resizer.style.right = dir.right;
-          widget.appendChild(resizer);
-          let resizing = false, startX, startY, startWidth, startHeight, startLeft, startTop;
-          resizer.addEventListener('mousedown', e => {
-            resizing = true;
-            startX = e.clientX;
-            startY = e.clientY;
-            startWidth = parseInt(getComputedStyle(widget).width, 10);
-            startHeight = parseInt(getComputedStyle(widget).height, 10);
-            startLeft = widget.getBoundingClientRect().left;
-            startTop = widget.getBoundingClientRect().top;
-            e.preventDefault();
-          });
-          window.addEventListener('mousemove', e => {
-            if (!resizing) return;
-            if (dir.dx !== 0) {
-              if (dir.dx === -1) {
-                const newWidth = startWidth - (e.clientX - startX);
-                if (newWidth > minW) {
-                  widget.style.width = newWidth + 'px';
-                  widget.style.left = startLeft + (e.clientX - startX) + 'px';
-                }
-              } else {
-                const newWidth = startWidth + (e.clientX - startX);
-                if (newWidth > minW) widget.style.width = newWidth + 'px';
-              }
-            }
-            if (dir.dy !== 0) {
-              if (dir.dy === -1) {
-                const newHeight = startHeight - (e.clientY - startY);
-                if (newHeight > minH) {
-                  widget.style.height = newHeight + 'px';
-                  widget.style.top = startTop + (e.clientY - startY) + 'px';
-                }
-              } else {
-                const newHeight = startHeight + (e.clientY - startY);
-                if (newHeight > minH) widget.style.height = newHeight + 'px';
-              }
-            }
-          });
-          window.addEventListener('mouseup', () => { resizing = false; });
-        });
+      function openInBrowser(url) {
+        openWindow('browser');
+        const input = $('#url');
+        input.value = url;
+        const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true });
+        input.dispatchEvent(event);
       }
       function startOnboarding() {
         $('#onboarding').classList.remove('hidden');
@@ -3066,6 +2993,7 @@
         $('#ob-step-2').classList.add('hidden');
         $('#ob-step-3').classList.add('hidden');
         $('#ob-step-4').classList.add('hidden');
+        $('#ob-step-5').classList.add('hidden');
         const currentTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
         $('#obTimeZone').value = currentTz;
         if (!$('#obTimeZone').querySelector(`option[value="${currentTz}"]`)) {
@@ -4229,7 +4157,7 @@
         const storeSearch = $('#storeSearch');
         async function loadApps() {
           try {
-            const res = await fetch('/apps.txt');
+            const res = await fetch('apps.txt');
             if (!res.ok) throw new Error('No apps.txt found');
             const text = await res.text();
             const blocks = text.split('---').map(b => b.trim()).filter(b => b);
@@ -4817,6 +4745,7 @@
             deleteBtn.textContent = 'Delete';
             deleteBtn.addEventListener('click', () => {
               customs.splice(index, 1);
+              customs = customs.filter((c, i) => i !== index);
               store.set(K.customApps, customs);
               let pinned = store.get(K.pinned, []);
               pinned = pinned.filter(p => p !== 'custom_' + app.id);
@@ -5100,25 +5029,6 @@
           store.set(K.tablet, e.target.checked);
           applyTabletMode(e.target.checked);
           flash(e.target.checked ? 'Tablet mode enabled' : 'Tablet mode disabled');
-        });
-        // Ripple effect for settings content
-        const content = $('.settings-content');
-        content.addEventListener('click', (e) => {
-          const interactiveTags = ['BUTTON', 'INPUT', 'SELECT', 'LABEL', 'A'];
-          if (interactiveTags.includes(e.target.tagName) || e.target.closest('.switch') || e.target.closest('.btn')) {
-            return;
-          }
-          const ripple = document.createElement('span');
-          const rect = content.getBoundingClientRect();
-          const size = Math.max(content.clientWidth, content.clientHeight);
-          const x = e.clientX - rect.left - size / 2;
-          const y = e.clientY - rect.top - size / 2;
-          ripple.style.width = ripple.style.height = size + 'px';
-          ripple.style.left = x + 'px';
-          ripple.style.top = y + 'px';
-          ripple.classList.add('ripple');
-          content.appendChild(ripple);
-          setTimeout(() => ripple.remove(), 600);
         });
         // Easter Egg: Credits KyrKat click
         $$('.credits-kyrkat').forEach(el => {
@@ -5800,16 +5710,51 @@
           $('#ob-step-4').classList.remove('hidden');
         });
         $('#obBack4').addEventListener('click', () => { $('#ob-step-4').classList.add('hidden'); $('#ob-step-3').classList.remove('hidden'); });
-        $('#obFinish').addEventListener('click', () => {
+        $('#obNext4').addEventListener('click', () => {
           const tz = $('#obTimeZone').value;
           store.set(K.tz, tz);
-          store.set(K.scale, 1);
+          $('#ob-step-4').classList.add('hidden');
+          $('#ob-step-5').classList.remove('hidden');
+        });
+        $('#obBack5').addEventListener('click', () => { $('#ob-step-5').classList.add('hidden'); $('#ob-step-4').classList.remove('hidden'); });
+        $('#obSkipMigrate').addEventListener('click', () => {
           store.set(K.setup, true);
-          updateTextColor();
-          if (welcomeFontInterval) clearInterval(welcomeFontInterval);
           $('#onboarding').classList.add('hidden');
           $('#loading').classList.add('hidden');
           showDesktop();
+        });
+        $('#obFinishMigrate').addEventListener('click', () => {
+          store.set(K.setup, true);
+          $('#onboarding').classList.add('hidden');
+          $('#loading').classList.add('hidden');
+          showDesktop();
+        });
+        $('#obChooseFolder').addEventListener('click', () => {
+          $('#obMigrateFolder').click();
+        });
+        $('#obMigrateFolder').addEventListener('change', async (e) => {
+          const selectedFiles = Array.from(e.target.files);
+          const status = $('#obMigrateStatus');
+          status.textContent = 'Migrating files...';
+          const meowFiles = loadFilesStore();
+          for (const file of selectedFiles) {
+            const relPath = file.webkitRelativePath;
+            if (!relPath) continue;
+            const key = '/' + relPath;
+            if (meowFiles[key]) continue;
+            let entry;
+            if (file.type.startsWith('text/') || file.name.endsWith('.html') || file.name.endsWith('.maf')) {
+              const text = await readAsText(file);
+              entry = { type: 'text', text };
+            } else {
+              const data = await readAsDataURL(file);
+              const type = file.type.startsWith('image/') ? 'image' : file.type.startsWith('audio/') ? 'audio' : file.type.startsWith('video/') ? 'video' : 'binary';
+              entry = { type, data };
+            }
+            meowFiles[key] = entry;
+          }
+          saveFilesStore(meowFiles);
+          status.textContent = 'Migration complete!';
         });
         $('#obSkip').addEventListener('click', () => {
           if (welcomeFontInterval) clearInterval(welcomeFontInterval);
