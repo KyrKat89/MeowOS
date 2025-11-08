@@ -1,0 +1,1047 @@
+
+app_name:Tic Tac Toe 
+app_icon:X
+app_developer:KyrKat
+app_code:
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MeowTacToe</title>
+<style>
+  :root{
+    --accent:#6ee7ff;
+    --x:#ffd166;
+    --o:#a0e9a5;
+    --grid:#ffffff22;
+    --text:#ffffffee;
+    --muted:#ffffff99;
+  }
+
+  /* Transparent page */
+  html,body{height:100%}
+  body{
+    margin:0;
+    background:transparent;            /* <- transparent background */
+    color:var(--text);
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Inter,Arial,sans-serif;
+    display:grid;
+    place-items:center;
+    user-select:none;
+  }
+
+  .wrap{
+    display:grid;
+    gap:14px;
+    padding:14px;
+    border-radius:18px;
+    backdrop-filter:saturate(1.2) blur(0px); /* safe in sandbox; no solid bg */
+  }
+
+  .title{
+    text-align:center;
+    font-weight:700;
+    letter-spacing:.3px;
+    color:var(--muted);
+  }
+
+  .board{
+    --size:min(78vmin,440px);
+    width:var(--size);
+    height:var(--size);
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    grid-template-rows:repeat(3,1fr);
+    gap:10px;
+  }
+
+  .cell{
+    display:grid;
+    place-items:center;
+    font-size:clamp(42px,12vmin,96px);
+    font-weight:800;
+    line-height:1;
+    border:2px solid var(--grid);
+    border-radius:16px;
+    background:transparent;
+    color:var(--text);
+    cursor:pointer;
+    transition:transform .06s ease, box-shadow .12s ease, border-color .12s ease;
+    outline:none;
+  }
+  .cell:focus-visible{ box-shadow:0 0 0 3px #ffffff33; }
+  .cell:hover{ transform:translateY(-1px); }
+  .cell.filled{ cursor:not-allowed; }
+  .cell.x{ color:var(--x); }
+  .cell.o{ color:var(--o); }
+  .cell.win{ border-color:var(--accent); box-shadow:0 0 18px #6ee7ff30 inset; }
+
+  .status{
+    text-align:center;
+    font-size:15px;
+    color:var(--muted);
+    min-height:1.4em;
+  }
+
+  .actions{
+    display:flex; gap:10px; justify-content:center;
+  }
+  button.reset{
+    padding:10px 14px;
+    font-weight:700;
+    border-radius:12px;
+    border:2px solid var(--grid);
+    background:transparent;
+    color:var(--text);
+    cursor:pointer;
+    transition:background .12s ease,border-color .12s ease,transform .06s ease;
+  }
+  button.reset:hover{ border-color:#ffffff55; transform:translateY(-1px); }
+  button.reset:active{ transform:translateY(0); }
+  .sr-only{
+    position:absolute!important; width:1px;height:1px; padding:0;margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap;border:0;
+  }
+</style>
+</head>
+<body>
+  <main class="wrap" role="application" aria-label="Tic Tac Toe">
+    <div class="title">MeowTacToe — transparent purr-playground</div>
+    <div id="board" class="board" role="grid" aria-label="Tic Tac Toe Board"></div>
+    <div id="status" class="status" aria-live="polite">X starts, meow.</div>
+    <div class="actions">
+      <button class="reset" id="resetBtn" type="button" title="Start a new round">New Round</button>
+      <span class="sr-only" id="srHelp">Use arrow keys or Tab to move. Press Enter or Space to place.</span>
+    </div>
+  </main>
+
+<script>
+(()=>{
+  const boardEl = document.getElementById('board');
+  const statusEl = document.getElementById('status');
+  const resetBtn = document.getElementById('resetBtn');
+
+  const WIN_LINES = [
+    [0,1,2],[3,4,5],[6,7,8], // rows
+    [0,3,6],[1,4,7],[2,5,8], // cols
+    [0,4,8],[2,4,6]          // diags
+  ];
+
+  let board, current, gameOver, moves, nextStarter = 'X';
+
+  function init(){
+    board = Array(9).fill('');
+    current = nextStarter;          // alternate who starts each round
+    nextStarter = nextStarter === 'X' ? 'O' : 'X';
+    gameOver = false;
+    moves = 0;
+    boardEl.innerHTML = '';
+    for(let i=0;i<9;i++){
+      const btn = document.createElement('button');
+      btn.className = 'cell';
+      btn.type = 'button';
+      btn.setAttribute('role','gridcell');
+      btn.setAttribute('aria-label','Empty');
+      btn.dataset.idx = i;
+      btn.tabIndex = 0;
+      btn.addEventListener('click', onCellClick);
+      btn.addEventListener('keydown', e=>{
+        if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); btn.click(); }
+      });
+      boardEl.appendChild(btn);
+    }
+    updateStatus(`${current} starts, meow.`);
+  }
+
+  function onCellClick(e){
+    const idx = +e.currentTarget.dataset.idx;
+    if(gameOver || board[idx]) return;
+
+    board[idx] = current;
+    moves++;
+    paintCell(idx, current);
+
+    const win = checkWin();
+    if(win){
+      gameOver = true;
+      highlightWin(win);
+      updateStatus(`${current} wins! purrfect 🐾`);
+      return;
+    }
+    if(moves === 9){
+      gameOver = true;
+      updateStatus(`It's a draw, meow.`);
+      return;
+    }
+    current = current === 'X' ? 'O' : 'X';
+    updateStatus(`${current}'s turn, meow.`);
+  }
+
+  function paintCell(idx, mark){
+    const cell = boardEl.children[idx];
+    cell.textContent = mark;
+    cell.classList.add('filled', mark.toLowerCase());
+    cell.setAttribute('aria-label', mark);
+  }
+
+  function updateStatus(text){
+    statusEl.textContent = text;
+  }
+
+  function checkWin(){
+    for(const line of WIN_LINES){
+      const [a,b,c] = line;
+      if(board[a] && board[a]===board[b] && board[a]===board[c]) return line;
+    }
+    return null;
+  }
+
+  function highlightWin(line){
+    line.forEach(i => boardEl.children[i].classList.add('win'));
+  }
+
+  resetBtn.addEventListener('click', init);
+
+  init();
+})();
+</script>
+</body>
+</html>
+
+---
+
+app_name:ScramJet
+app_icon:https://github.com/MercuryWorkshop/scramjet/blob/main/assets/scramjet.png?raw=true
+app_developer:Mercury Workshop
+app_code:
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>scramjet iframe</title>
+  <style>
+    html, body { height: 100%; margin: 0; background: transparent; }
+    iframe { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; }
+  </style>
+</head>
+<body>
+  <iframe
+    src="https://scramjet-5e6.pages.dev/"
+    allow="clipboard-read; clipboard-write; fullscreen; geolocation; microphone; camera; autoplay; encrypted-media"
+    referrerpolicy="no-referrer"
+  ></iframe>
+</body>
+</html>
+
+---
+app_name:V86
+app_icon:https://copy.sh/img/v86.png
+app_developer:copy
+app_code:
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>v86 Emulator</title>
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+    }
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+  </style>
+</head>
+<body>
+  <iframe src="https://copy.sh/v86/" allowfullscreen></iframe>
+</body>
+</html>
+
+---
+app_name:MeowTube
+app_icon:https://img.freepik.com/premium-vector/square-youtube-logo-isolated-white-background_469489-911.jpg?semt=ais_hybrid&w=740&q=80
+app_developer:KyrKat
+app_code:
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MeowTube — simple YouTube player</title>
+  <style>
+    :root{
+      --glass: rgba(255,255,255,0.12);
+      --text: #e8ecf1;
+      --muted:#b9c2cf;
+      --accent:#8aa4ff;
+      --error:#ff6b6b;
+      --radius:16px;
+      --shadow:0 10px 30px rgba(0,0,0,.35);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      background: transparent; /* requested transparent background */
+      color: var(--text);
+      font: 500 16px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+      display:grid;place-items:center;
+    }
+    .wrap{
+      width:min(920px, 95vw);
+      display:grid; gap:14px;
+      backdrop-filter: saturate(140%) blur(10px);
+      -webkit-backdrop-filter: saturate(140%) blur(10px);
+      background: var(--glass);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: var(--radius);
+      padding:16px;
+      box-shadow: var(--shadow);
+    }
+    h1{
+      margin:0; font-size: 20px; font-weight:700; letter-spacing:.2px; color:var(--text);
+      display:flex; align-items:center; gap:10px;
+    }
+    h1 .logo{font-size:22px;}
+    .bar{display:flex; gap:10px; align-items:center;}
+    .bar input{
+      flex:1;
+      background: rgba(255,255,255,0.08);
+      border:1px solid rgba(255,255,255,0.15);
+      border-radius: 12px;
+      padding:12px 14px;
+      color:var(--text);
+      outline:none;
+    }
+    .bar input::placeholder{color:var(--muted)}
+    .btn{
+      appearance:none; border:0; cursor:pointer;
+      padding:12px 16px; border-radius:12px;
+      background:linear-gradient(180deg, rgba(255,255,255,0.28), rgba(255,255,255,0.14));
+      border:1px solid rgba(255,255,255,0.25);
+      color:#0b1020; font-weight:700;
+      transition:.15s ease transform, .15s ease filter;
+      user-select:none;
+    }
+    .btn:hover{filter:brightness(1.05)}
+    .btn:active{transform:translateY(1px)}
+    .error{display:none; color:var(--error); font-weight:600}
+    .player{
+      position:relative; width:100%;
+      border-radius: 14px; overflow:hidden;
+      background:rgba(0,0,0,.4);
+      border:1px solid rgba(255,255,255,.12);
+      aspect-ratio:16/9;
+      display:grid; place-items:center;
+    }
+    .player iframe{width:100%; height:100%; border:0; display:block}
+    .hint{font-size:12px; color:var(--muted)}
+  </style>
+</head>
+<body>
+  <main class="wrap" role="main">
+    <h1><span class="logo">📺</span> MeowTube</h1>
+    <div class="bar" role="group" aria-label="Enter YouTube URL">
+      <input id="url" type="url" inputmode="url" placeholder="Paste a YouTube link (watch, youtu.be, or Shorts)…" autocomplete="off" />
+      <button class="btn" id="play">Play</button>
+    </div>
+    <div class="hint">Tip: supports <code>youtube.com/watch?v=…</code>, <code>youtu.be/…</code>, and <code>youtube.com/shorts/…</code>. Start times like <code>&t=1m30s</code> are respected.</div>
+    <div id="error" class="error" role="alert">Couldn’t find a video ID in that link. Try a standard YouTube URL.</div>
+    <section class="player" aria-label="Video player">
+      <iframe id="frame" title="YouTube video player" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+    </section>
+  </main>
+
+  <script>
+    const input = document.getElementById('url');
+    const btn = document.getElementById('play');
+    const iframe = document.getElementById('frame');
+    const errorEl = document.getElementById('error');
+
+    function parseTimeToSeconds(t){
+      if(!t) return 0;
+      // Accept formats like 90, 1m30s, 2h10m, etc.
+      if(/^\d+$/.test(t)) return parseInt(t,10);
+      let total = 0; const re = /(\d+)(h|m|s)/g; let m;
+      while((m = re.exec(t))){
+        const val = parseInt(m[1],10);
+        if(m[2] === 'h') total += val*3600;
+        if(m[2] === 'm') total += val*60;
+        if(m[2] === 's') total += val;
+      }
+      return total;
+    }
+
+    function extractVideoId(raw){
+      try{
+        const u = new URL(raw.trim());
+        const host = u.hostname.replace(/^www\./,'');
+        // watch?v=ID
+        if(host.endsWith('youtube.com')){
+          // Shorts: /shorts/ID
+          const shortsMatch = u.pathname.match(/^\/shorts\/([a-zA-Z0-9_-]{6,})/);
+          if(shortsMatch) return { id: shortsMatch[1], t: u.searchParams.get('t') };
+          // Standard watch
+          const v = u.searchParams.get('v');
+          if(v) return { id: v, t: u.searchParams.get('t') };
+          // /embed/ID
+          const em = u.pathname.match(/^\/embed\/([a-zA-Z0-9_-]{6,})/);
+          if(em) return { id: em[1], t: u.searchParams.get('t') };
+        }
+        if(host === 'youtu.be'){
+          const m = u.pathname.match(/^\/([a-zA-Z0-9_-]{6,})/);
+          if(m) return { id: m[1], t: u.searchParams.get('t') };
+        }
+      }catch(e){ /* fall through */ }
+      // If raw looks like an id already
+      if(/^[a-zA-Z0-9_-]{6,}$/.test(raw.trim())) return { id: raw.trim(), t: null };
+      return null;
+    }
+
+    function play(){
+      const val = input.value;
+      const res = extractVideoId(val);
+      if(!res){
+        errorEl.style.display = 'block';
+        return;
+      }
+      errorEl.style.display = 'none';
+      const start = parseTimeToSeconds(res.t);
+      const params = new URLSearchParams({autoplay:1, modestbranding:1, rel:0, iv_load_policy:3});
+      if(start>0) params.set('start', String(start));
+      // Use origin if available (helps with some browsers)
+      try{ params.set('origin', location.origin); }catch{}
+      const src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(res.id)}?${params.toString()}`;
+      iframe.src = src;
+      // Move focus to player for keyboard shortcuts
+      iframe.focus({preventScroll:true});
+    }
+
+    btn.addEventListener('click', play);
+    input.addEventListener('keydown', (e)=>{ if(e.key==='Enter') play(); });
+
+    // If page opened with ?url=... prefill and play
+    try{
+      const q = new URLSearchParams(location.search);
+      const preset = q.get('url');
+      if(preset){ input.value = preset; play(); }
+    }catch{}
+  </script>
+</body>
+</html>
+
+---
+app_name:MeowAI
+app_icon:https://ia601207.us.archive.org/29/items/226f-0252-6725-4f-1e-8ae-6-dee-3a-615765a/226f0252-6725-4f1e-8ae6-dee3a615765a.png
+app_developer:KyrKat
+app_code:
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MeowAI — iframe wrapper</title>
+<style>
+  html, body { height: 100%; margin: 0; background: #0b0f17; color: #e6ecff; font-family: system-ui, sans-serif; }
+  .wrap { position: fixed; inset: 0; }
+  iframe { width: 100%; height: 100%; border: 0; display: block; }
+  .hint {
+    position: absolute; inset: 0; display: grid; place-items: center; text-align: center;
+    padding: 24px; background: radial-gradient(1200px 600px at 50% 0%, rgba(255,255,255,0.04), transparent 60%);
+  }
+  .hint[hidden] { display: none; }
+  .btn {
+    display: inline-block; margin-top: 10px; padding: 10px 14px; border-radius: 10px;
+    background: #8a9bff; color: #0b0f17; text-decoration: none; font-weight: 600;
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <iframe
+      id="meowai"
+      src="https://meowai.kyrylo89.workers.dev/"
+      allow="clipboard-read; clipboard-write; fullscreen; autoplay; camera; microphone"
+      referrerpolicy="origin-when-cross-origin"
+      loading="eager"
+    ></iframe>
+
+    <div id="fallback" class="hint" hidden>
+      <div>
+        <div style="font-size:22px; margin-bottom:8px;">If the page looks blank, your browser blocked the iframe 😿</div>
+        <a class="btn" href="https://meowai.kyrylo89.workers.dev/" target="_blank" rel="noopener">Open MeowAI directly</a>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // Simple fallback: if iframe doesn't finish loading quickly, show a direct-link hint.
+  const frame = document.getElementById('meowai');
+  const fallback = document.getElementById('fallback');
+  let loaded = false;
+
+  frame.addEventListener('load', () => { loaded = true; });
+
+  // After 4s, if still not loaded, show fallback (helps when X-Frame-Options/CSP blocks embedding)
+  setTimeout(() => { if (!loaded) fallback.hidden = false; }, 4000);
+</script>
+</body>
+</html>
+
+---
+app_name:OpenStreatMap
+app_icon:https://images.seeklogo.com/logo-png/48/1/openstreetmap-logo-png_seeklogo-483934.png
+app_developer:unknown
+app_code:
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>MeowOS Proxy Frame</title>
+  <style>
+    /* reset */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background-color: #0b0f17;
+      color: #fff;
+      height: 100vh;
+      width: 100vw;
+      overflow: hidden;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .frame-wrapper {
+      position: relative;
+      height: 100%;
+      width: 100%;
+      border-radius: 0;
+      overflow: hidden;
+    }
+
+    iframe {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      background: #000;
+    }
+
+    /* fallback message if iframe can't load because of X-Frame-Options */
+    .fallback {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 2rem;
+      color: #a8b3d1;
+      background: radial-gradient(circle at 20% 20%, rgba(138,155,255,0.15) 0%, rgba(11,15,23,0) 60%);
+      font-size: 0.9rem;
+      line-height: 1.4;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="frame-wrapper">
+    <iframe
+      src="https://meowosproxy.kyrylo89.workers.dev/?url=https://www.openstreetmap.org/"
+      allowfullscreen
+      referrerpolicy="no-referrer"
+    ></iframe>
+
+   
+  </div>
+</body>
+</html>
+
+---
+app_name:MeowSurf
+app_icon:https://archive.org/download/surflogo/surflogo.png
+app_developer:KyrKat
+app_code:
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>MeowSurf — Edge‑like Surf Game</title>
+<style>
+  :root {
+    --bg:#0a1222; --ink:#e6f0ff; --muted:#9fb3d1; --accent:#67d0ff; --danger:#ff5d6c; --ok:#5bff9a; --gold:#ffd166;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;background:radial-gradient(1200px 800px at 50% -10%, #0a2a4a 0%, #081327 60%, #050a16 100%);color:var(--ink);font:16px/1.2 system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;overflow:hidden}
+  #wrap{position:fixed;inset:0;display:grid;place-items:center}
+  canvas{display:block;width:100vw;height:100vh;touch-action:none}
+  .hud{position:fixed;inset:0;pointer-events:none}
+  .row{position:absolute;left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:12px 16px;font-weight:600;letter-spacing:.3px;text-shadow:0 1px 0 rgba(0,0,0,.4)}
+  .top{top:0}
+  .bottom{bottom:0}
+  .chip{pointer-events:auto;user-select:none;background:rgba(0,0,0,.25);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:8px 12px;display:inline-flex;align-items:center;gap:8px}
+  .bar{height:12px;width:min(50vw,420px);background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:999px;overflow:hidden}
+  .fill{height:100%;width:0%;background:linear-gradient(90deg,var(--accent),#5cffde);transition:width .12s ease}
+  .btn{pointer-events:auto;user-select:none;border:1px solid rgba(255,255,255,.14);background:rgba(0,0,0,.35);padding:10px 14px;border-radius:12px;display:inline-flex;gap:8px;align-items:center;font-weight:700;cursor:pointer}
+  .btn:hover{background:rgba(0,0,0,.45)}
+  .panel{position:absolute;inset:0;display:grid;place-items:center;background:linear-gradient(180deg,rgba(7,16,33,.85),rgba(7,16,33,.65));backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);}
+  .card{max-width:min(680px,92vw);background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);padding:24px;border-radius:20px;box-shadow:0 10px 40px rgba(0,0,0,.35)}
+  h1{margin:0 0 8px;font-size:clamp(20px,4vw,36px)}
+  p{margin:6px 0;color:var(--muted)}
+  kbd{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-bottom-color:rgba(0,0,0,.35);border-radius:6px;padding:2px 6px;font-weight:700}
+  ul{margin:10px 0 0 18px;color:var(--muted)}
+  .hidden{display:none}
+  .leftRight{display:flex;gap:8px;align-items:center}
+  .pill{display:inline-flex;gap:8px;align-items:center;padding:6px 10px;border:1px solid rgba(255,255,255,.14);border-radius:999px;background:rgba(0,0,0,.35)}
+  .link{opacity:.8}
+  .link a{color:var(--ink)}
+  .touchHints{display:none}
+  @media (pointer:coarse){.touchHints{display:block}}
+</style>
+</head>
+<body>
+  <div id="wrap">
+    <canvas id="game" aria-label="Surf game canvas" role="img"></canvas>
+    <div class="hud" aria-live="polite">
+      <div class="row top">
+        <div class="leftRight" style="gap:12px">
+          <span class="chip" id="lives">❤️ x3</span>
+          <span class="chip" id="shield">🛡️ off</span>
+          <span class="chip" id="coins">🪙 0</span>
+        </div>
+        <div class="leftRight">
+          <span class="chip">Best: <span id="best">0</span> m</span>
+          <button id="pauseBtn" class="btn" aria-label="Pause (P)">⏸️ Pause</button>
+          <button id="muteBtn" class="btn" aria-label="Toggle sound (M)">🔊 Sound</button>
+        </div>
+      </div>
+      <div class="row bottom" style="justify-content:center">
+        <div class="pill" title="Boost energy">
+          ⚡ Boost
+          <div class="bar" aria-hidden="true"><div class="fill" id="boostFill"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="menu" class="panel">
+      <div class="card">
+        <h1>MeowSurf 🏄‍♂️</h1>
+        <p>Fast, cat‑smooth, Edge‑inspired endless surfing. Avoid rocks and buoys, grab coins and power‑ups, and ride the waves. Meow!</p>
+        <ul>
+          <li>Move: <kbd>←</kbd><kbd>→</kbd> <span style="opacity:.7">or</span> <kbd>A</kbd><kbd>D</kbd> &nbsp; • &nbsp; <kbd>↑</kbd>/<kbd>↓</kbd> for fine control</li>
+          <li>Boost dash: <kbd>Space</kbd> (uses ⚡ energy)</li>
+          <li>Pause / Sound: <kbd>P</kbd> / <kbd>M</kbd></li>
+        </ul>
+        <p class="touchHints">On touch: hold left/right side to steer, swipe up or double‑tap to dash.</p>
+        <div style="display:flex;gap:12px;align-items:center;margin-top:12px">
+          <button id="playBtn" class="btn" style="font-size:1.1rem">▶️ Start Surfing</button>
+          <span class="link">Hey</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="gameover" class="panel hidden">
+      <div class="card">
+        <h1>Wiped Out! 🌊</h1>
+        <p>You surfed <b><span id="finalScore">0</span> m</b> and collected <b><span id="finalCoins">0</span> coins</b>.</p>
+        <p>Best run: <b><span id="finalBest">0</span> m</b></p>
+        <div style="display:flex;gap:12px;align-items:center;margin-top:12px">
+          <button id="retryBtn" class="btn">🔄 Try Again</button>
+          <button id="menuBtn" class="btn">🏠 Main Menu</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // ====== Utilities ======
+  const rand = (a,b)=>Math.random()*(b-a)+a;
+  const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
+  const now=()=>performance.now();
+  const lerp=(a,b,t)=>a+(b-a)*t;
+
+  // ====== Canvas Setup (retina aware) ======
+  const cvs = document.getElementById('game');
+  const ctx = cvs.getContext('2d');
+  let DPR = Math.max(1, Math.min(2, window.devicePixelRatio||1));
+  function resize(){
+    const w = window.innerWidth, h = window.innerHeight;
+    cvs.width = Math.round(w * DPR);
+    cvs.height = Math.round(h * DPR);
+    cvs.style.width = w+'px';
+    cvs.style.height = h+'px';
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  addEventListener('resize', resize, {passive:true});
+  resize();
+
+  // ====== DOM HUD refs ======
+  const elLives = document.getElementById('lives');
+  const elShield = document.getElementById('shield');
+  const elCoins = document.getElementById('coins');
+  const elBest = document.getElementById('best');
+  const elBoost = document.getElementById('boostFill');
+  const elMenu = document.getElementById('menu');
+  const elGameOver = document.getElementById('gameover');
+  const elFinalScore = document.getElementById('finalScore');
+  const elFinalCoins = document.getElementById('finalCoins');
+  const elFinalBest = document.getElementById('finalBest');
+  const btnPlay = document.getElementById('playBtn');
+  const btnPause = document.getElementById('pauseBtn');
+  const btnMute = document.getElementById('muteBtn');
+  const btnRetry = document.getElementById('retryBtn');
+  const btnMenu = document.getElementById('menuBtn');
+
+  // ====== Persistent state ======
+  const LS = {
+    get best(){ return +localStorage.getItem('meowsurf_best')||0 },
+    set best(v){ localStorage.setItem('meowsurf_best', String(v|0)); }
+  }
+  elBest.textContent = LS.best|0;
+
+  // ====== Audio (lightweight, synth) ======
+  const SFX = (()=>{
+    const ctxA = new (window.AudioContext||window.webkitAudioContext||function(){})();
+    let muted = false;
+    const env = (dur=0.2)=>({attack:0.005,decay:dur*0.6,sustain:0.15,release:dur*0.4});
+    function beep(type='sine', f=440, dur=0.2, vol=0.2){
+      if(!ctxA || muted) return;
+      const o = ctxA.createOscillator();
+      const g = ctxA.createGain();
+      o.type = type; o.frequency.value = f; o.connect(g); g.connect(ctxA.destination);
+      const e = env(dur); const t = ctxA.currentTime;
+      g.gain.setValueAtTime(0,t);
+      g.gain.linearRampToValueAtTime(vol, t+e.attack);
+      g.gain.exponentialRampToValueAtTime(vol*e.sustain, t+e.attack+e.decay);
+      g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
+      o.start(t); o.stop(t+dur+e.release);
+    }
+    return {
+      toggle(){ muted=!muted; return !muted },
+      coin(){ beep('triangle', 880, .15, .2) },
+      hit(){ beep('sawtooth', 160, .25, .25) },
+      boost(){ beep('square', 520, .12, .25) },
+      start(){ beep('sine', 600, .2, .25); setTimeout(()=>beep('sine', 760, .2, .25),120) }
+    }
+  })();
+
+  // ====== Game State ======
+  const STATE = { MENU:0, PLAY:1, PAUSE:2, OVER:3 };
+  let state = STATE.MENU;
+
+  const world = {
+    t: 0,
+    distance: 0,
+    speed: 240, // px/sec world scroll
+    difficulty: 1,
+    spawnTimer: 0,
+    spawnInterval: 0.9,
+  };
+
+  const player = {
+    x: innerWidth/2,
+    y: innerHeight*0.7,
+    vx: 0, vy: 0,
+    speed: 360,
+    radius: 18,
+    lives: 3,
+    shield: 0,
+    coins: 0,
+    boost: 1, // 0..1
+    boosting: false,
+    invuln: 0,
+  };
+
+  const keys = new Set();
+  let touchLeft=false, touchRight=false, touchUp=false, touchDown=false, touchDash=false, lastTap=0;
+
+  // ====== Entities ======
+  const entities = [];
+  const Type = { ROCK:'rock', BUOY:'buoy', COIN:'coin', ENERGY:'energy', SHIELD:'shield' };
+
+  function spawn(){
+    const W = innerWidth, H = innerHeight;
+    const laneX = rand(60, W-60);
+    const roll = Math.random();
+    if(roll < 0.65){ // obstacle
+      const t = Math.random()<0.6?Type.ROCK:Type.BUOY;
+      entities.push({t, x: laneX, y: -40, r: t===Type.ROCK?22:18, vy: world.speed*rand(0.95,1.2)});
+    } else if(roll < 0.85){ // coin
+      entities.push({t:Type.COIN, x: laneX, y:-30, r:12, vy: world.speed});
+    } else { // power-up
+      const t = Math.random()<0.5?Type.ENERGY:Type.SHIELD;
+      entities.push({t, x: laneX, y:-34, r:16, vy: world.speed*0.9});
+    }
+  }
+
+  // ====== Input ======
+  addEventListener('keydown', (e)=>{
+    if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' ','KeyA','KeyD','KeyW','KeyS','KeyP','KeyM'].includes(e.code)) e.preventDefault();
+    if(e.code==='KeyP') togglePause();
+    if(e.code==='KeyM') setMuted(!toggleMuteBtn(false));
+    if(e.code==='Space') player.boosting = true;
+    keys.add(e.code);
+  });
+  addEventListener('keyup', (e)=>{
+    if(e.code==='Space') player.boosting = false;
+    keys.delete(e.code);
+  });
+
+  // Touch controls: left/right halves + swipe up/double tap for dash
+  function onTouch(e){
+    const t = e.changedTouches[0]; if(!t) return;
+    const x = t.clientX, y = t.clientY; const mid = innerWidth*0.5;
+    const ty = e.type;
+    if(ty==='touchstart'){
+      const nowT = Date.now();
+      if(nowT-lastTap<250){ touchDash=true; setTimeout(()=>touchDash=false,200) }
+      lastTap = nowT;
+      if(x<mid) touchLeft=true; else touchRight=true;
+      if(y < innerHeight*0.45) touchUp=true; else touchDown=true;
+    } else if(ty==='touchmove'){
+      touchLeft = x<mid; touchRight = x>=mid; touchUp = y < innerHeight*0.45; touchDown = !touchUp;
+    } else { // end / cancel
+      touchLeft=touchRight=touchUp=touchDown=false;
+    }
+  }
+  addEventListener('touchstart', onTouch, {passive:false});
+  addEventListener('touchmove', onTouch, {passive:false});
+  addEventListener('touchend', onTouch, {passive:false});
+  addEventListener('touchcancel', onTouch, {passive:false});
+
+  // ====== Buttons ======
+  btnPlay.addEventListener('click', () => startGame());
+  btnRetry.addEventListener('click', () => startGame());
+  btnMenu.addEventListener('click', () => { state=STATE.MENU; elMenu.classList.remove('hidden'); elGameOver.classList.add('hidden'); });
+  btnPause.addEventListener('click', ()=>togglePause());
+  btnMute.addEventListener('click', ()=>setMuted(toggleMuteBtn(true)));
+
+  function togglePause(){
+    if(state===STATE.PLAY){ state=STATE.PAUSE; } else if(state===STATE.PAUSE){ state=STATE.PLAY; last=now(); }
+  }
+  function toggleMuteBtn(toggle){
+    const on = SFX.toggle();
+    btnMute.textContent = on? '🔊 Sound' : '🔈 Muted';
+    return on;
+  }
+  function setMuted(desiredOn){ /* button already toggled visuals above */ }
+
+  function startGame(){
+    // Reset world & player
+    entities.splice(0, entities.length);
+    world.t=0; world.distance=0; world.speed=240; world.difficulty=1; world.spawnTimer=0; world.spawnInterval=0.9;
+    player.x=innerWidth/2; player.y=innerHeight*0.7; player.vx=player.vy=0; player.lives=3; player.shield=0; player.coins=0; player.boost=1; player.boosting=false; player.invuln=0;
+    state=STATE.PLAY; elMenu.classList.add('hidden'); elGameOver.classList.add('hidden');
+    updateHUD(); SFX.start(); last = now();
+  }
+
+  // ====== HUD ======
+  function updateHUD(){
+    elLives.textContent = `❤️ x${player.lives}`;
+    elShield.textContent = `🛡️ ${player.shield>0? 'on':'off'}`;
+    elCoins.textContent = `🪙 ${player.coins}`;
+    elBest.textContent = LS.best|0;
+    elBoost.style.width = `${Math.round(player.boost*100)}%`;
+  }
+
+  // ====== Rendering helpers ======
+  function drawWater(bgT){
+    const W = innerWidth, H = innerHeight;
+    // Gradient water
+    const g = ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,'#0c2a4e'); g.addColorStop(0.5,'#0a1f3b'); g.addColorStop(1,'#071632');
+    ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+    // Flow lines
+    ctx.globalAlpha = 0.18;
+    ctx.lineWidth = 2;
+    for(let i=0;i<14;i++){
+      const y = ( (bgT*80 + i*(H/14)) % (H+40) )-40;
+      ctx.beginPath();
+      const amp = 10 + i%3*6; const k = 0.012 + i*0.0008;
+      for(let x=-40;x<=W+40;x+=16){
+        const yy = y + Math.sin((x+bgT*120)*k)*amp;
+        if(x===-40) ctx.moveTo(x,yy); else ctx.lineTo(x,yy);
+      }
+      ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawSurfer(p){
+    // Board
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    const tilt = p.vx*0.002; ctx.rotate(tilt);
+    // shadow
+    ctx.globalAlpha=0.25; ctx.fillStyle='#000'; ctx.beginPath(); ctx.ellipse(0,10,22,8,0,0,Math.PI*2); ctx.fill(); ctx.globalAlpha=1;
+    // board
+    const grd = ctx.createLinearGradient(-20,-8,20,8);
+    grd.addColorStop(0,'#ff9a5a'); grd.addColorStop(.5,'#ffd36e'); grd.addColorStop(1,'#ff6a8b');
+    ctx.fillStyle = grd; ctx.beginPath(); ctx.ellipse(0,0,24,10,0,0,Math.PI*2); ctx.fill();
+    // rider
+    ctx.fillStyle = '#e6f0ff'; ctx.beginPath(); ctx.arc(0,-10,6,0,Math.PI*2); ctx.fill(); // head
+    ctx.strokeStyle = '#e6f0ff'; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(0,-6); ctx.lineTo(0,6); ctx.stroke(); // body
+    ctx.beginPath(); ctx.moveTo(0,-2); ctx.lineTo(10,6); ctx.moveTo(0,-2); ctx.lineTo(-10,6); ctx.stroke(); // arms
+    ctx.restore();
+
+    // Shield aura
+    if(p.shield>0){
+      ctx.save(); ctx.translate(p.x,p.y);
+      const r = p.radius + 8 + Math.sin(world.t*0.01)*2;
+      ctx.strokeStyle = 'rgba(103,208,255,.9)'; ctx.lineWidth=2.5;
+      ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.stroke(); ctx.restore();
+    }
+  }
+
+  function drawEntity(e){
+    ctx.save();
+    if(e.t===Type.ROCK){
+      ctx.translate(e.x,e.y);
+      ctx.fillStyle = '#324861';
+      ctx.beginPath(); ctx.moveTo(0,-18); ctx.lineTo(16,12); ctx.lineTo(-16,12); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.1)'; ctx.fillRect(-6,-2,4,3);
+    } else if(e.t===Type.BUOY){
+      ctx.translate(e.x,e.y);
+      ctx.fillStyle = '#ff6b6b'; ctx.beginPath(); ctx.arc(0,0,12,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(-2,-18,4,10); ctx.fillStyle='#ff6b6b'; ctx.fillRect(-4,-8,8,6);
+    } else if(e.t===Type.COIN){
+      ctx.translate(e.x,e.y);
+      ctx.fillStyle = '#ffd166'; ctx.beginPath(); ctx.arc(0,0,10,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle = '#b58a00'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(0,0,6,0,Math.PI*2); ctx.stroke();
+    } else if(e.t===Type.ENERGY){
+      ctx.translate(e.x,e.y); ctx.rotate(Math.sin(world.t*0.02+e.x)*0.3);
+      ctx.fillStyle = '#5cffde'; ctx.beginPath(); ctx.moveTo(0,-12); ctx.lineTo(6,0); ctx.lineTo(-2,0); ctx.lineTo(2,12); ctx.lineTo(-6,0); ctx.lineTo(2,0); ctx.closePath(); ctx.fill();
+    } else if(e.t===Type.SHIELD){
+      ctx.translate(e.x,e.y);
+      ctx.strokeStyle = '#67d0ff'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(0,0,12,0,Math.PI*2); ctx.stroke();
+      ctx.globalAlpha=.4; ctx.fillStyle='#67d0ff'; ctx.beginPath(); ctx.arc(0,0,12,0,Math.PI*2); ctx.fill(); ctx.globalAlpha=1;
+    }
+    ctx.restore();
+  }
+
+  function circleHit(ax,ay,ar,bx,by,br){
+    const dx=ax-bx, dy=ay-by; return (dx*dx+dy*dy) <= (ar+br)*(ar+br);
+  }
+
+  function particlesSplash(x,y){
+    // light splash trail
+    ctx.save(); ctx.globalAlpha=.5; ctx.fillStyle='rgba(255,255,255,.7)';
+    for(let i=0;i<6;i++){
+      const a = Math.random()*Math.PI*2; const r = rand(0,10);
+      ctx.beginPath(); ctx.arc(x+Math.cos(a)*r, y+Math.sin(a)*r, rand(0.5,1.8), 0, Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // ====== Main Loop ======
+  let last = now();
+  function step(){
+    requestAnimationFrame(step);
+    const t = now(); let dt = (t-last)/1000; if(dt>0.06) dt=0.06; last=t;
+
+    if(state===STATE.PAUSE){ drawWater(world.t); drawSurfer(player); return; }
+    if(state===STATE.MENU || state===STATE.OVER){ drawWater(world.t); return; }
+
+    // PLAY state
+    world.t += dt*1000;
+    const W = innerWidth, H = innerHeight;
+
+    // Difficulty ramps with distance
+    world.distance += world.speed*dt/2/ (DPR>1?DPR:1) / (Math.max(W,800)/800);
+    const d = world.distance|0;
+    world.speed = 240 + Math.min(260, d*0.6);
+    world.spawnInterval = clamp(0.9 - d*0.0012, 0.28, 0.9);
+
+    // Input — keyboard or touch
+    let ax=0, ay=0;
+    if(keys.has('ArrowLeft')||keys.has('KeyA')||touchLeft) ax -= 1;
+    if(keys.has('ArrowRight')||keys.has('KeyD')||touchRight) ax += 1;
+    if(keys.has('ArrowUp')||keys.has('KeyW')||touchUp) ay -= 1;
+    if(keys.has('ArrowDown')||keys.has('KeyS')||touchDown) ay += 1;
+
+    const speed = player.speed * (player.boosting||touchDash ? 1.75 : 1);
+    if(player.boosting||touchDash){ if(player.boost>0){ player.boost = clamp(player.boost - dt*0.5, 0, 1); if((world.t|0)%4===0) SFX.boost(); } }
+    else player.boost = clamp(player.boost + dt*0.12, 0, 1);
+
+    player.vx = lerp(player.vx, ax*speed, 0.15);
+    player.vy = lerp(player.vy, ay*speed*0.7, 0.12);
+    player.x = clamp(player.x + player.vx*dt, 30, W-30);
+    player.y = clamp(player.y + player.vy*dt, H*0.35, H-40);
+    if(player.invuln>0) player.invuln -= dt;
+
+    // Spawning
+    world.spawnTimer -= dt;
+    if(world.spawnTimer<=0){ spawn(); world.spawnTimer = world.spawnInterval*rand(0.7,1.3); }
+
+    // Move entities
+    for(let i=entities.length-1;i>=0;i--){
+      const e = entities[i];
+      e.y += e.vy*dt;
+      // slight wave sway
+      if(e.t===Type.BUOY || e.t===Type.ENERGY || e.t===Type.SHIELD || e.t===Type.COIN){ e.x += Math.sin((world.t*0.003 + e.y*0.02))*0.9; }
+      // off-screen cleanup
+      if(e.y > H+80){ entities.splice(i,1); continue; }
+      // collisions
+      if(circleHit(player.x,player.y,player.radius, e.x,e.y,e.r)){
+        if(e.t===Type.COIN){ player.coins++; entities.splice(i,1); SFX.coin(); }
+        else if(e.t===Type.ENERGY){ player.boost = clamp(player.boost + 0.45, 0, 1); entities.splice(i,1); SFX.coin(); }
+        else if(e.t===Type.SHIELD){ player.shield = 8; entities.splice(i,1); SFX.coin(); }
+        else { // obstacle
+          if(player.shield>0){ player.shield -= 1; entities.splice(i,1); SFX.hit(); }
+          else if(player.invuln<=0){ player.lives--; player.invuln = 1.2; SFX.hit(); if(player.lives<=0){ return gameOver(); } }
+        }
+      }
+    }
+
+    // Draw
+    drawWater(world.t*0.02);
+    // foam trail
+    particlesSplash(player.x-12, player.y+10);
+    // entities
+    for(const e of entities) drawEntity(e);
+    // player
+    drawSurfer(player);
+
+    // UI inline (distance)
+    ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.font = '700 18px system-ui, Segoe UI'; ctx.textAlign='center';
+    ctx.fillText(`${d} m`, W/2, 28);
+
+    // Update HUD DOM occasionally
+    if((world.t|0)%2===0) updateHUD(); else elBoost.style.width = `${Math.round(player.boost*100)}%`;
+  }
+
+  function gameOver(){
+    state = STATE.OVER;
+    elFinalScore.textContent = (world.distance|0);
+    elFinalCoins.textContent = player.coins;
+    if(world.distance>LS.best){ LS.best = world.distance|0; }
+    elFinalBest.textContent = LS.best|0; elBest.textContent = LS.best|0;
+    updateHUD();
+    elGameOver.classList.remove('hidden');
+  }
+
+  requestAnimationFrame(step);
+})();
+</script>
+</body>
+</html>
+
+---
